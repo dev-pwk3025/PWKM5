@@ -6,14 +6,17 @@ import {
   type Student,
   computeStudentAttendanceSummary,
 } from '../shared/classroomData';
+import {
+  submitStudentSelfCheckIn,
+  teacherSetAttendance,
+} from '../services/classroomFirebase';
 
 interface AttendanceCheckinViewProps {
   state: ClassroomStatePayload;
   nowBangkok: BangkokNowInfo;
   selectedStudentId: string;
   onSelectStudent: (studentId: string) => void;
-  teacherToken: string | null;
-  onStateUpdated: (next: ClassroomStatePayload) => void;
+  isTeacher: boolean;
   onNotify: (msg: string, tone: 'success' | 'error') => void;
 }
 
@@ -25,13 +28,20 @@ const ROOM_FILTERS = [
   { id: '14', label: 'ม.5/14' },
 ];
 
+function extractFirebaseErrMessage(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (raw.includes('Missing or insufficient permissions') || raw.includes('permission-denied')) {
+    return 'ยังไม่ได้ตั้งค่า Firestore Rules ใน Firebase Console (กรุณานำไฟล์ firestore.rules ไปวางในโปรเจกต์ devpwk-a0115-459302)';
+  }
+  return raw || fallback;
+}
+
 export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
   state,
   nowBangkok,
   selectedStudentId,
   onSelectStudent,
-  teacherToken,
-  onStateUpdated,
+  isTeacher,
   onNotify,
 }) => {
   const [roomFilter, setRoomFilter] = useState('all');
@@ -51,7 +61,7 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
   }, [state.students, roomFilter, searchQuery]);
 
   const activeWeek = nowBangkok.currentWeek;
-  const displayWeekNumber = teacherToken ? teacherSelectedWeek : activeWeek?.week ?? 4;
+  const displayWeekNumber = isTeacher ? teacherSelectedWeek : activeWeek?.week ?? 4;
   const displayWeekObj =
     state.weeks.find((w) => w.week === displayWeekNumber) ?? state.weeks[3];
 
@@ -59,20 +69,10 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
     onSelectStudent(student.id);
     setCheckingStudentId(student.id);
     try {
-      const res = await fetch('/api/checkin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: student.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        onNotify(data.error || 'ไม่สามารถเช็คชื่อได้', 'error');
-        return;
-      }
-      if (data.state) onStateUpdated(data.state);
-      onNotify(data.message || `เช็คชื่อ ${student.name} สำเร็จ`, 'success');
-    } catch {
-      onNotify('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อเช็คชื่อได้', 'error');
+      const msg = await submitStudentSelfCheckIn(student.id);
+      onNotify(msg, 'success');
+    } catch (err) {
+      onNotify(extractFirebaseErrMessage(err, 'ไม่สามารถเช็คชื่อได้'), 'error');
     } finally {
       setCheckingStudentId(null);
     }
@@ -83,29 +83,16 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
     week: number,
     nextStatus: 'present' | 'absent'
   ) {
-    if (!teacherToken) return;
+    if (!isTeacher) return;
     setCheckingStudentId(student.id);
     try {
-      const res = await fetch('/api/teacher/attendance', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${teacherToken}`,
-        },
-        body: JSON.stringify({ studentId: student.id, week, status: nextStatus }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        onNotify(data.error || 'ไม่สามารถอัปเดตการเช็คชื่อได้', 'error');
-        return;
-      }
-      if (data.state) onStateUpdated(data.state);
+      await teacherSetAttendance(student.id, week, nextStatus);
       onNotify(
-        `บันทึก "${nextStatus === 'present' ? 'มาเรียน' : 'ขาด'}" ให้ ${student.name} (สัปดาห์ที่ ${week}) แล้ว`,
+        `บันทึก "${nextStatus === 'present' ? 'มาเรียน' : 'ขาด'}" ให้ ${student.name} (สัปดาห์ที่ ${week}) ลง Firebase แล้ว`,
         'success'
       );
-    } catch {
-      onNotify('เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+    } catch (err) {
+      onNotify(extractFirebaseErrMessage(err, 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'), 'error');
     } finally {
       setCheckingStudentId(null);
     }
@@ -124,7 +111,6 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
 
   return (
     <section className="space-y-6">
-      {/* Status Banner for Thursday 14:55 - 15:50 Window */}
       <div className="rounded-xl border border-slate-200 bg-white p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1.5">
@@ -164,12 +150,11 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
           </div>
         </div>
 
-        {/* Teacher Week Selector if signed in as teacher */}
-        {teacherToken && (
+        {isTeacher && (
           <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-slate-700">
               <span className="font-semibold text-blue-700">โหมดครูผู้สอน:</span>{' '}
-              เลือกสัปดาห์เพื่อปรับแก้สถานะเข้าเรียนรายบุคคลได้ทันที (สัปดาห์ที่ 1–3 เป็นเครดิตฟรีมาทุกคน)
+              เลือกสัปดาห์เพื่อปรับแก้สถานะเข้าเรียนรายบุคคลลง Firebase ได้ทันที
             </div>
             <div className="flex items-center gap-2">
               <label htmlFor="teacher-week-select" className="text-xs font-medium text-slate-500 whitespace-nowrap">
@@ -192,7 +177,6 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
         )}
       </div>
 
-      {/* Filter & Search Bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
           {ROOM_FILTERS.map((room) => (
@@ -229,7 +213,6 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
         </div>
       </div>
 
-      {/* Student Roster Table / Responsive Cards */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm">
@@ -337,7 +320,7 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {teacherToken ? (
+                      {isTeacher ? (
                         <div className="inline-flex items-center gap-1.5">
                           <button
                             type="button"

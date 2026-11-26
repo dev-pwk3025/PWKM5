@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Award,
   CheckCircle2,
   Copy,
+  Eye,
   FileImage,
   Plus,
   Send,
@@ -9,36 +11,38 @@ import {
   Upload,
   Wand2,
   X,
-  Eye,
-  Award,
 } from 'lucide-react';
 import {
   type Assignment,
   type ClassroomStatePayload,
   type Submission,
 } from '../shared/classroomData';
+import {
+  submitStudentWorksheet,
+  teacherCreateAssignment,
+  teacherGradeSubmission,
+} from '../services/classroomFirebase';
 
 interface AssignmentsViewProps {
   state: ClassroomStatePayload;
   selectedStudentId: string;
   onSelectStudent: (studentId: string) => void;
-  teacherToken: string | null;
-  onStateUpdated: (next: ClassroomStatePayload) => void;
+  isTeacher: boolean;
   onNotify: (msg: string, tone: 'success' | 'error') => void;
 }
 
-async function compressImageFileToDataUrl(file: File): Promise<string> {
+async function prepareImageFile(file: File): Promise<{ compressedFile: File; previewUrl: string }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('ไม่สามารถอ่านไฟล์ภาพได้'));
     reader.onload = () => {
       const rawUrl = String(reader.result || '');
       if (file.size <= 1.5 * 1024 * 1024) {
-        resolve(rawUrl);
+        resolve({ compressedFile: file, previewUrl: rawUrl });
         return;
       }
       const img = new Image();
-      img.onerror = () => resolve(rawUrl);
+      img.onerror = () => resolve({ compressedFile: file, previewUrl: rawUrl });
       img.onload = () => {
         const maxDim = 1600;
         let { width, height } = img;
@@ -52,11 +56,27 @@ async function compressImageFileToDataUrl(file: File): Promise<string> {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          resolve(rawUrl);
+          resolve({ compressedFile: file, previewUrl: rawUrl });
           return;
         }
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.86));
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              resolve({ compressedFile: file, previewUrl: rawUrl });
+              return;
+            }
+            const nextFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
+              type: 'image/jpeg',
+            });
+            resolve({
+              compressedFile: nextFile,
+              previewUrl: canvas.toDataURL('image/jpeg', 0.85),
+            });
+          },
+          'image/jpeg',
+          0.85
+        );
       };
       img.src = rawUrl;
     };
@@ -64,17 +84,24 @@ async function compressImageFileToDataUrl(file: File): Promise<string> {
   });
 }
 
+function extractFirebaseErrMessage(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (raw.includes('Missing or insufficient permissions') || raw.includes('permission-denied')) {
+    return 'ยังไม่ได้ตั้งค่า Firestore Rules ใน Firebase Console (กรุณานำไฟล์ firestore.rules ไปวางในโปรเจกต์ devpwk-a0115-459302)';
+  }
+  return raw || fallback;
+}
+
 export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   state,
   selectedStudentId,
   onSelectStudent,
-  teacherToken,
-  onStateUpdated,
+  isTeacher,
   onNotify,
 }) => {
   const publishedAssignments = useMemo(
-    () => state.assignments.filter((a) => teacherToken || a.isPublished),
-    [state.assignments, teacherToken]
+    () => state.assignments.filter((a) => isTeacher || a.isPublished),
+    [state.assignments, isTeacher]
   );
 
   const [activeAssignmentId, setActiveAssignmentId] = useState<string>(
@@ -86,12 +113,11 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [promptText, setPromptText] = useState('');
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [pendingUploadDataUrl, setPendingUploadDataUrl] = useState<string | null>(null);
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
   const [pendingFileName, setPendingFileName] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<{ url: string; title: string } | null>(null);
 
-  // Teacher modal for creating real-time assignment
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newSubtitle, setNewSubtitle] = useState('');
@@ -100,7 +126,6 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   const [newMaxScore, setNewMaxScore] = useState('20');
   const [creatingAssignment, setCreatingAssignment] = useState(false);
 
-  // Teacher inline grading state
   const [gradeDrafts, setGradeDrafts] = useState<Record<string, { score: string; feedback: string }>>({});
   const [savingGradeKey, setSavingGradeKey] = useState<string | null>(null);
 
@@ -111,14 +136,13 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     return state.submissions[`${activeAssignment.id}_${selectedStudentId}`];
   }, [activeAssignment, selectedStudentId, state.submissions]);
 
-  // Sync form when switching assignment or student
   useEffect(() => {
     if (!activeAssignment) return;
     if (existingSubmission) {
       setAnswers(existingSubmission.answers || {});
       setPromptText(existingSubmission.promptText || '');
       setImagePreviewUrl(existingSubmission.imageUrl);
-      setPendingUploadDataUrl(null);
+      setPendingUploadFile(null);
       setPendingFileName(existingSubmission.imageOriginalName || '');
     } else {
       const blank: Record<string, string> = {};
@@ -128,7 +152,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       setAnswers(blank);
       setPromptText('');
       setImagePreviewUrl(null);
-      setPendingUploadDataUrl(null);
+      setPendingUploadFile(null);
       setPendingFileName('');
     }
   }, [activeAssignment?.id, selectedStudentId, existingSubmission?.submittedAt]);
@@ -156,9 +180,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       return;
     }
     try {
-      const dataUrl = await compressImageFileToDataUrl(file);
-      setPendingUploadDataUrl(dataUrl);
-      setImagePreviewUrl(dataUrl);
+      const { compressedFile, previewUrl } = await prepareImageFile(file);
+      setPendingUploadFile(compressedFile);
+      setImagePreviewUrl(previewUrl);
       setPendingFileName(file.name);
     } catch {
       onNotify('ไม่สามารถอ่านไฟล์ภาพที่เลือกได้', 'error');
@@ -198,42 +222,28 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
       onNotify('กรุณาเลือกชื่อนักเรียนก่อนส่งใบงาน', 'error');
       return;
     }
-    if (!pendingUploadDataUrl && !existingSubmission?.imageUrl) {
-      onNotify('กรุณาแนบไฟล์ภาพผลงานก่อนกดส่งใบงาน', 'error');
-      return;
-    }
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId: selectedStudentId,
-          assignmentId: activeAssignment.id,
-          answers,
-          promptText,
-          imageDataUrl: pendingUploadDataUrl || '',
-          imageOriginalName: pendingFileName || existingSubmission?.imageOriginalName || '',
-        }),
+      const msg = await submitStudentWorksheet({
+        studentId: selectedStudentId,
+        assignment: activeAssignment,
+        answers,
+        promptText,
+        imageFile: pendingUploadFile,
+        existingSubmission,
       });
-      const data = await res.json();
-      if (!res.ok) {
-        onNotify(data.error || 'ส่งใบงานไม่สำเร็จ', 'error');
-        return;
-      }
-      if (data.state) onStateUpdated(data.state);
-      setPendingUploadDataUrl(null);
-      onNotify(data.message || 'ส่งใบงานเรียบร้อยแล้ว', 'success');
-    } catch {
-      onNotify('เกิดข้อผิดพลาดในการส่งใบงาน', 'error');
+      setPendingUploadFile(null);
+      onNotify(msg, 'success');
+    } catch (err) {
+      onNotify(extractFirebaseErrMessage(err, 'ส่งใบงานไม่สำเร็จ'), 'error');
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleSaveGrade(studentId: string, assignment: Assignment) {
-    if (!teacherToken) return;
+    if (!isTeacher) return;
     const key = `${assignment.id}_${studentId}`;
     const existing = state.submissions[key];
     const draft = gradeDrafts[key] ?? {
@@ -243,28 +253,16 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
     setSavingGradeKey(key);
     try {
-      const res = await fetch('/api/teacher/grade', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${teacherToken}`,
-        },
-        body: JSON.stringify({
-          assignmentId: assignment.id,
-          studentId,
-          score: draft.score === '' ? null : Number(draft.score),
-          feedback: draft.feedback,
-        }),
+      await teacherGradeSubmission({
+        assignment,
+        studentId,
+        score: draft.score === '' ? null : Number(draft.score),
+        feedback: draft.feedback,
+        existingSubmission: existing,
       });
-      const data = await res.json();
-      if (!res.ok) {
-        onNotify(data.error || 'บันทึกคะแนนไม่สำเร็จ', 'error');
-        return;
-      }
-      if (data.state) onStateUpdated(data.state);
-      onNotify('บันทึกคะแนนและข้อเสนอแนะเรียบร้อยแล้ว', 'success');
-    } catch {
-      onNotify('เกิดข้อผิดพลาดในการบันทึกคะแนน', 'error');
+      onNotify('บันทึกคะแนนและข้อเสนอแนะลง Firebase เรียบร้อยแล้ว', 'success');
+    } catch (err) {
+      onNotify(extractFirebaseErrMessage(err, 'บันทึกคะแนนไม่สำเร็จ'), 'error');
     } finally {
       setSavingGradeKey(null);
     }
@@ -272,39 +270,28 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
   async function handleCreateAssignment(e: React.FormEvent) {
     e.preventDefault();
-    if (!teacherToken) return;
+    if (!isTeacher) return;
     setCreatingAssignment(true);
     try {
-      const res = await fetch('/api/teacher/assignments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${teacherToken}`,
-        },
-        body: JSON.stringify({
-          title: newTitle,
-          subtitle: newSubtitle,
-          mission: newMission,
-          samplePrompt: newSamplePrompt,
-          maxScore: Number(newMaxScore) || 20,
-        }),
+      const nextOrder = state.assignments.reduce((max, a) => Math.max(max, a.order), 0) + 1;
+      const created = await teacherCreateAssignment({
+        nextOrder,
+        title: newTitle,
+        subtitle: newSubtitle,
+        mission: newMission,
+        samplePrompt: newSamplePrompt,
+        maxScore: Number(newMaxScore) || 20,
       });
-      const data = await res.json();
-      if (!res.ok) {
-        onNotify(data.error || 'สร้างใบงานไม่สำเร็จ', 'error');
-        return;
-      }
-      if (data.state) onStateUpdated(data.state);
-      if (data.assignment?.id) setActiveAssignmentId(data.assignment.id);
+      setActiveAssignmentId(created.id);
       setNewTitle('');
       setNewSubtitle('');
       setNewMission('');
       setNewSamplePrompt('');
       setNewMaxScore('20');
       setShowCreateModal(false);
-      onNotify('มอบหมายใบงานใหม่แบบเรียลไทม์แล้ว', 'success');
-    } catch {
-      onNotify('เกิดข้อผิดพลาดในการสร้างใบงาน', 'error');
+      onNotify('มอบหมายใบงานใหม่ลง Firebase แบบเรียลไทม์แล้ว', 'success');
+    } catch (err) {
+      onNotify(extractFirebaseErrMessage(err, 'สร้างใบงานไม่สำเร็จ'), 'error');
     } finally {
       setCreatingAssignment(false);
     }
@@ -313,16 +300,15 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   return (
     <section className="space-y-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
-        {/* Left Sidebar: Assignment List */}
         <aside className="space-y-3 lg:col-span-4">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h2 className="text-base font-bold text-slate-900">รายการใบงานทั้งหมด</h2>
               <p className="text-xs text-slate-500">
-                รวม {publishedAssignments.reduce((acc, a) => acc + a.maxScore, 0)} คะแนน · ส่งภาพแบบเรียลไทม์
+                รวม {publishedAssignments.reduce((acc, a) => acc + a.maxScore, 0)} คะแนน · บันทึกลง Firebase เรียลไทม์
               </p>
             </div>
-            {teacherToken && (
+            {isTeacher && (
               <button
                 type="button"
                 onClick={() => setShowCreateModal(true)}
@@ -340,8 +326,8 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               const studentSub = selectedStudentId
                 ? state.submissions[`${assignment.id}_${selectedStudentId}`]
                 : undefined;
-              const countForAssignment = state.students.filter(
-                (s) => Boolean(state.submissions[`${assignment.id}_${s.id}`])
+              const countForAssignment = state.students.filter((s) =>
+                Boolean(state.submissions[`${assignment.id}_${s.id}`])
               ).length;
 
               return (
@@ -373,7 +359,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                         <span className="inline-flex items-center gap-1 text-emerald-700">
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           ส่งแล้ว
-                          {studentSub.score !== null ? ` · ได้ ${studentSub.score}/${assignment.maxScore} คะแนน` : ' · รอครูตรวจ'}
+                          {studentSub.score !== null
+                            ? ` · ได้ ${studentSub.score}/${assignment.maxScore} คะแนน`
+                            : ' · รอครูตรวจ'}
                         </span>
                       ) : (
                         <span className="text-amber-700">ยังไม่ได้ส่งงานนี้</span>
@@ -386,10 +374,8 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
           </div>
         </aside>
 
-        {/* Right Main Column: Active Worksheet + Submission + Real-Time Gallery */}
         {activeAssignment && (
           <div className="space-y-6 lg:col-span-8">
-            {/* Worksheet Instructions */}
             <div className="rounded-xl border border-slate-200 bg-white p-6">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                 <span>ใบงานที่ {activeAssignment.order}</span>
@@ -453,16 +439,15 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               )}
             </div>
 
-            {/* Student Submission Form */}
             <form
               onSubmit={handleSubmitAssignment}
-              className="rounded-xl border border-slate-200 bg-white p-6 space-y-5"
+              className="space-y-5 rounded-xl border border-slate-200 bg-white p-6"
             >
               <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h4 className="text-base font-bold text-slate-900">ส่งใบงานพร้อมแนบไฟล์ภาพ</h4>
                   <p className="text-xs text-slate-500">
-                    เลือกชื่อตนเอง กรอกรายละเอียด Prompt และอัปโหลดภาพผลงานที่สร้างจาก ChatGPT
+                    เลือกชื่อตนเอง กรอกรายละเอียด Prompt และอัปโหลดภาพผลงานลง Firebase
                   </p>
                 </div>
                 {existingSubmission && (
@@ -505,7 +490,6 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                 </select>
               </div>
 
-              {/* Dynamic Worksheet Fields */}
               {activeAssignment.fields.length > 0 && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   {activeAssignment.fields.map((field) => (
@@ -562,7 +546,6 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                 </div>
               )}
 
-              {/* Prompt Text */}
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label htmlFor="prompt-full-text" className="block text-sm font-semibold text-slate-700">
@@ -589,7 +572,6 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                 />
               </div>
 
-              {/* Image Upload */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700">
                   แนบไฟล์ภาพผลงาน (PNG, JPG, WEBP, GIF) *
@@ -652,7 +634,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                   <Send className="h-4 w-4" />
                   <span>
                     {submitting
-                      ? 'กำลังส่งงาน...'
+                      ? 'กำลังอัปโหลดและบันทึก...'
                       : existingSubmission
                         ? 'อัปเดตงานที่ส่งแล้ว'
                         : 'ส่งใบงานแบบเรียลไทม์'}
@@ -661,7 +643,6 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               </div>
             </form>
 
-            {/* Real-time Classroom Submissions Gallery & Teacher Grading */}
             <div className="rounded-xl border border-slate-200 bg-white p-6">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -669,14 +650,14 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                     ผลงานนักเรียนที่ส่งแล้ว — ใบงานที่ {activeAssignment.order}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    อัปเดตแบบเรียลไทม์ทันทีเมื่อมีนักเรียนส่งภาพ ({submittedCount}/20 คน)
+                    ซิงค์ข้อมูลจาก Firebase Firestore แบบเรียลไทม์ ({submittedCount}/20 คน)
                   </p>
                 </div>
               </div>
 
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {assignmentSubmissions
-                  .filter((item) => teacherToken || item.submission !== null)
+                  .filter((item) => isTeacher || item.submission !== null)
                   .map(({ student, submission }) => {
                     const key = `${activeAssignment.id}_${student.id}`;
                     const draft = gradeDrafts[key] ?? {
@@ -751,7 +732,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                             )}
                           </div>
 
-                          {teacherToken && (
+                          {isTeacher && (
                             <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
                               <div className="flex items-center gap-2">
                                 <label className="text-xs font-medium text-slate-600 whitespace-nowrap">
@@ -800,7 +781,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                   })}
               </div>
 
-              {!teacherToken && submittedCount === 0 && (
+              {!isTeacher && submittedCount === 0 && (
                 <div className="rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-slate-500">
                   ยังไม่มีนักเรียนส่งผลงานสำหรับใบงานนี้ — เป็นคนแรกที่แนบภาพผลงานได้เลย
                 </div>
@@ -810,7 +791,6 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
         )}
       </div>
 
-      {/* Lightbox Modal */}
       {lightboxImage && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4"
@@ -845,7 +825,6 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
         </div>
       )}
 
-      {/* Teacher Create Assignment Modal */}
       {showCreateModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"

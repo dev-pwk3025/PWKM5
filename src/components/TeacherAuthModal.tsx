@@ -1,64 +1,65 @@
 import React, { useState } from 'react';
-import { Lock, ShieldCheck, X } from 'lucide-react';
+import { signInWithPopup, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { ShieldCheck, X } from 'lucide-react';
+import { auth, db, googleProvider } from '../firebase';
+import { isTeacherUser } from '../services/classroomFirebase';
 
 interface TeacherAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  hasConfiguredPasscode: boolean;
-  usesEnvPasscode: boolean;
-  onAuthenticated: (token: string) => void;
+  onAuthenticated: (email: string) => void;
 }
 
 export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
   isOpen,
   onClose,
-  hasConfiguredPasscode,
-  usesEnvPasscode,
   onAuthenticated,
 }) => {
-  const [passcode, setPasscode] = useState('');
-  const [confirmPasscode, setConfirmPasscode] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const isSetupMode = !hasConfiguredPasscode && !usesEnvPasscode;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleGoogleSignIn() {
     setError('');
-
-    if (isSetupMode) {
-      if (passcode.trim().length < 4) {
-        setError('กรุณาตั้งรหัสผ่านอย่างน้อย 4 ตัวอักษร');
-        return;
-      }
-      if (passcode.trim() !== confirmPasscode.trim()) {
-        setError('รหัสผ่านทั้งสองช่องไม่ตรงกัน');
-        return;
-      }
-    }
-
     setSubmitting(true);
     try {
-      const endpoint = isSetupMode ? '/api/teacher/setup' : '/api/teacher/login';
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passcode: passcode.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'ไม่สามารถยืนยันตัวตนได้');
+      const cred = await signInWithPopup(auth, googleProvider);
+      const user = cred.user;
+      let isAdminDoc = false;
+      try {
+        const adminSnap = await getDoc(doc(db, 'admins', user.uid));
+        isAdminDoc = adminSnap.exists();
+      } catch {
+        isAdminDoc = false;
+      }
+
+      if (!isTeacherUser(user.email, isAdminDoc)) {
+        await signOut(auth);
+        setError(
+          `บัญชี ${user.email ?? ''} ไม่มีสิทธิ์ครูผู้สอน (กรุณาเข้าสู่ระบบด้วยอีเมลครูผู้สอน aek-apisit@pwk.ac.th)`
+        );
         return;
       }
-      setPasscode('');
-      setConfirmPasscode('');
-      onAuthenticated(data.token);
+
+      onAuthenticated(user.email || 'ครูผู้สอน');
       onClose();
-    } catch {
-      setError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    } catch (err) {
+      const code = (err as { code?: string })?.code || '';
+      if (code === 'auth/unauthorized-domain') {
+        setError(
+          `โดเมน ${window.location.hostname} ยังไม่ได้รับอนุญาตใน Firebase Authentication — กรุณาเพิ่มโดเมนนี้ใน Firebase Console > Authentication > Settings > Authorized domains`
+        );
+      } else if (code === 'auth/popup-closed-by-user') {
+        setError('ปิดหน้าต่างเข้าสู่ระบบก่อนเสร็จสิ้น');
+      } else if (code === 'auth/operation-not-allowed') {
+        setError(
+          'กรุณาเปิดใช้งาน Google Sign-In ใน Firebase Console > Authentication > Sign-in method ก่อนใช้งาน'
+        );
+      } else {
+        setError('ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองใหม่อีกครั้ง');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -75,16 +76,14 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700">
-              {isSetupMode ? <ShieldCheck className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
+              <ShieldCheck className="h-5 w-5" />
             </div>
             <div>
               <h2 id="teacher-auth-title" className="text-lg font-bold text-slate-900">
-                {isSetupMode ? 'ตั้งรหัสผ่านครูผู้สอนครั้งแรก' : 'เข้าสู่โหมดครูผู้สอน'}
+                เข้าสู่โหมดครูผู้สอน
               </h2>
               <p className="text-xs text-slate-500">
-                {isSetupMode
-                  ? 'กำหนดรหัสผ่านสำหรับให้คะแนน ตรวจงาน และมอบหมายใบงานใหม่'
-                  : 'สำหรับตรวจงาน ให้คะแนน และปรับแก้สถานะการเข้าเรียน'}
+                ยืนยันตัวตนด้วยบัญชี Google ของครูผู้สอน (Firebase Auth)
               </p>
             </div>
           </div>
@@ -98,47 +97,20 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-          <div>
-            <label htmlFor="teacher-passcode" className="block text-sm font-medium text-slate-700">
-              {isSetupMode ? 'กำหนดรหัสผ่านครูผู้สอน (อย่างน้อย 4 ตัวอักษร)' : 'รหัสผ่านครูผู้สอน'}
-            </label>
-            <input
-              id="teacher-passcode"
-              type="password"
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              placeholder="กรอกรหัสผ่าน..."
-              autoFocus
-              required
-              className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
-            />
+        <div className="mt-5 space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3.5 text-xs leading-relaxed text-slate-600">
+            สิทธิ์ครูผู้สอนใช้สำหรับ <strong>ให้คะแนนใบงาน 100 คะแนน</strong>,{' '}
+            <strong>มอบหมายงานใหม่แบบเรียลไทม์</strong> และ{' '}
+            <strong>แก้ไขสถานะการเข้าเรียน</strong> ผ่าน Firebase Firestore
           </div>
 
-          {isSetupMode && (
-            <div>
-              <label htmlFor="teacher-passcode-confirm" className="block text-sm font-medium text-slate-700">
-                ยืนยันรหัสผ่านอีกครั้ง
-              </label>
-              <input
-                id="teacher-passcode-confirm"
-                type="password"
-                value={confirmPasscode}
-                onChange={(e) => setConfirmPasscode(e.target.value)}
-                placeholder="กรอกรหัสผ่านซ้ำอีกครั้ง..."
-                required
-                className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
-              />
-            </div>
-          )}
-
           {error && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-medium leading-relaxed text-red-700">
               {error}
             </p>
           )}
 
-          <div className="flex items-center justify-end gap-2 pt-2">
+          <div className="flex items-center justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={onClose}
@@ -147,14 +119,15 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
               ยกเลิก
             </button>
             <button
-              type="submit"
+              type="button"
               disabled={submitting}
+              onClick={handleGoogleSignIn}
               className="rounded-lg bg-blue-700 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-800 disabled:opacity-60"
             >
-              {submitting ? 'กำลังตรวจสอบ...' : isSetupMode ? 'บันทึกและเข้าสู่โหมดครู' : 'เข้าสู่ระบบ'}
+              {submitting ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบด้วย Google'}
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

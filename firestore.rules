@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && (
+          request.auth.token.email == 'aek-apisit@pwk.ac.th'
+          || exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+    }
+
+    // Bangkok server time check (UTC+7): Thursdays 14:55 - 15:50
+    function isBangkokCheckinWindow() {
+      let bkk = request.time + duration.time(7, 0, 0);
+      let mins = bkk.hours() * 60 + bkk.minutes();
+      return bkk.dayOfWeek() == 4 && mins >= 895 && mins <= 950;
+    }
+
+    function isValidAttendance(data) {
+      return data.keys().hasAll(['studentId', 'week', 'status', 'source'])
+        && data.keys().hasOnly(['studentId', 'week', 'status', 'source', 'checkedAt'])
+        && data.studentId is string && data.studentId.size() <= 20 && data.studentId.matches('^[0-9]+$')
+        && data.week is int && data.week >= 1 && data.week <= 20
+        && data.status in ['present', 'absent']
+        && data.source in ['free_credit', 'self_checkin', 'teacher'];
+    }
+
+    function isValidSubmission(data) {
+      return data.keys().hasAll(['id', 'assignmentId', 'studentId', 'submittedAt'])
+        && data.keys().hasOnly([
+          'id', 'assignmentId', 'studentId', 'answers', 'promptText',
+          'imageUrl', 'imageOriginalName', 'score', 'feedback', 'submittedAt', 'gradedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.assignmentId)
+        && data.studentId is string && data.studentId.size() <= 20 && data.studentId.matches('^[0-9]+$')
+        && (!('promptText' in data) || (data.promptText is string && data.promptText.size() <= 4000))
+        && (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 1500))
+        && (!('imageOriginalName' in data) || data.imageOriginalName == null || (data.imageOriginalName is string && data.imageOriginalName.size() <= 200))
+        && (!('score' in data) || data.score == null || (data.score is number && data.score >= 0 && data.score <= 100))
+        && (!('feedback' in data) || (data.feedback is string && data.feedback.size() <= 1000))
+        && data.submittedAt is string && data.submittedAt.size() <= 64;
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+
+    match /admins/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin() && isValidId(assignmentId);
+    }
+
+    match /attendance/{recordId} {
+      allow read: if true;
+      allow create: if isValidId(recordId) && isValidAttendance(incoming()) && (
+        isAdmin() || (
+          incoming().source == 'self_checkin'
+          && incoming().status == 'present'
+          && incoming().week >= 4
+          && isBangkokCheckinWindow()
+        )
+      );
+      allow update: if isValidId(recordId) && isValidAttendance(incoming()) && isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /submissions/{submissionId} {
+      allow read: if true;
+      allow create: if isValidId(submissionId) && isValidSubmission(incoming()) && (
+        isAdmin() || (
+          (!('score' in incoming()) || incoming().score == null)
+          && (!('feedback' in incoming()) || incoming().feedback == '')
+          && (!('gradedAt' in incoming()) || incoming().gradedAt == null)
+        )
+      );
+      allow update: if isValidId(submissionId) && isValidSubmission(incoming()) && (
+        isAdmin() || (
+          incoming().studentId == existing().studentId
+          && incoming().assignmentId == existing().assignmentId
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'answers', 'promptText', 'imageUrl', 'imageOriginalName', 'submittedAt'
+          ])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+  }
+}
