@@ -1,5 +1,19 @@
 {
   "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "Enrolled student in the AI Creative Classroom.",
+      "type": "object",
+      "properties": {
+        "order": { "type": "number" },
+        "id": { "type": "string", "maxLength": 20, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 160 },
+        "grade": { "type": "string", "maxLength": 20 },
+        "room": { "type": "string", "maxLength": 20 },
+        "number": { "type": "number" }
+      },
+      "required": ["order", "id", "name", "grade", "room", "number"]
+    },
     "Assignment": {
       "title": "Assignment",
       "description": "Classroom AI worksheet assignment with structured prompt fields and max score.",
@@ -24,7 +38,7 @@
       "description": "Student weekly Thursday attendance record (20 weeks, 80% threshold).",
       "type": "object",
       "properties": {
-        "studentId": { "type": "string", "maxLength": 20, "pattern": "^[0-9]+$" },
+        "studentId": { "type": "string", "maxLength": 20, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "week": { "type": "number" },
         "status": { "type": "string", "enum": ["present", "absent"] },
         "source": { "type": "string", "enum": ["free_credit", "self_checkin", "teacher"] },
@@ -39,7 +53,7 @@
       "properties": {
         "id": { "type": "string", "maxLength": 100, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "assignmentId": { "type": "string", "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "studentId": { "type": "string", "maxLength": 20, "pattern": "^[0-9]+$" },
+        "studentId": { "type": "string", "maxLength": 20, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "promptText": { "type": "string", "maxLength": 4000 },
         "imageUrl": { "type": "string", "maxLength": 1500 },
         "imageOriginalName": { "type": "string", "maxLength": 200 },
@@ -52,6 +66,10 @@
     }
   },
   "firestore": {
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Editable student roster managed by teacher."
+    },
     "/assignments/{assignmentId}": {
       "schema": { "$ref": "#/entities/Assignment" },
       "description": "Published AI classroom worksheets totaling 100 points."

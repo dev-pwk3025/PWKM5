@@ -227,6 +227,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
     try {
       const msg = await submitStudentWorksheet({
         studentId: selectedStudentId,
+        studentsList: state.students,
         assignment: activeAssignment,
         answers,
         promptText,
@@ -343,7 +344,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                     <span className="font-mono font-medium tabular-nums">
                       ใบงานที่ {assignment.order} · {assignment.maxScore} คะแนน
                     </span>
-                    <span className="tabular-nums">ส่งแล้ว {countForAssignment}/20</span>
+                    <span className="tabular-nums">ส่งแล้ว {countForAssignment}/{state.students.length}</span>
                   </div>
                   <div
                     className={`mt-1 text-sm font-semibold ${
@@ -481,7 +482,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                   required
                   className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
                 >
-                  <option value="">-- กรุณาเลือกชื่อนักเรียน (20 คน) --</option>
+                  <option value="">-- กรุณาเลือกชื่อนักเรียน ({state.students.length} คน) --</option>
                   {state.students.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.order}. [{s.id}] {s.name} ({s.grade}/{s.room} เลขที่ {s.number})
@@ -650,7 +651,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                     ผลงานนักเรียนที่ส่งแล้ว — ใบงานที่ {activeAssignment.order}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    ซิงค์ข้อมูลจาก Firebase Firestore แบบเรียลไทม์ ({submittedCount}/20 คน)
+                    ซิงค์ข้อมูลจาก Firebase Firestore แบบเรียลไทม์ ({submittedCount}/{state.students.length} คน)
                   </p>
                 </div>
               </div>

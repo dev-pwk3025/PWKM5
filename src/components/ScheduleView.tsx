@@ -1,17 +1,46 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CalendarDays, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import {
   type BangkokNowInfo,
   type ClassroomStatePayload,
   CHECKIN_END_MINUTES,
 } from '../shared/classroomData';
+import { teacherSetAttendance } from '../services/classroomFirebase';
 
 interface ScheduleViewProps {
   state: ClassroomStatePayload;
   nowBangkok: BangkokNowInfo;
+  isTeacher?: boolean;
+  onNotify?: (msg: string, tone: 'success' | 'error') => void;
 }
 
-export const ScheduleView: React.FC<ScheduleViewProps> = ({ state, nowBangkok }) => {
+export const ScheduleView: React.FC<ScheduleViewProps> = ({
+  state,
+  nowBangkok,
+  isTeacher = false,
+  onNotify,
+}) => {
+  const [updatingCell, setUpdatingCell] = useState<string | null>(null);
+
+  async function handleToggleCell(studentId: string, studentName: string, week: number, currentlyPresent: boolean) {
+    if (!isTeacher) return;
+    const cellKey = `${studentId}_${week}`;
+    setUpdatingCell(cellKey);
+    const nextStatus = currentlyPresent ? 'absent' : 'present';
+    try {
+      await teacherSetAttendance(studentId, week, nextStatus);
+      onNotify?.(
+        `อัปเดต ${studentName} สัปดาห์ที่ ${week} เป็น "${nextStatus === 'present' ? 'มาเรียน' : 'ขาด'}" แล้ว`,
+        'success'
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'ไม่สามารถแก้ไขบันทึกการเข้าเรียนได้';
+      onNotify?.(msg, 'error');
+    } finally {
+      setUpdatingCell(null);
+    }
+  }
+
   return (
     <section className="space-y-6">
       <div className="rounded-xl border border-slate-200 bg-white p-6">
@@ -66,7 +95,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ state, nowBangkok })
                 <p className="mt-1.5 line-clamp-2 text-xs text-slate-700">{week.topic}</p>
                 <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-500 tabular-nums">
                   <span>14:55–15:50 น.</span>
-                  <span className="font-medium text-slate-700">มาเรียน {presentCount}/20</span>
+                  <span className="font-medium text-slate-700">
+                    มาเรียน {presentCount}/{state.students.length}
+                  </span>
                 </div>
               </div>
             );
@@ -78,10 +109,11 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ state, nowBangkok })
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="border-b border-slate-200 px-5 py-4">
           <h3 className="text-base font-bold text-slate-900">
-            ตารางสรุปการเข้าเรียนรายสัปดาห์ (20 สัปดาห์ × 20 คน)
+            ตารางสรุปการเข้าเรียนรายสัปดาห์ (20 สัปดาห์ × {state.students.length} คน)
           </h3>
           <p className="mt-0.5 text-xs text-slate-500">
-            เครื่องหมาย ✓ = มาเรียน · ✕ = ขาด / ไม่เข้าชุมนุม · · = ยังไม่ถึงกำหนด
+            เครื่องหมาย ✓ = มาเรียน · ✕ = ขาด / ไม่เข้าชุมนุม · นาฬิกา = ยังไม่ถึงกำหนด
+            {isTeacher && ' · (โหมดครู: คลิกที่ช่องเพื่อสลับ มา/ขาด ได้ทันที)'}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -114,7 +146,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ state, nowBangkok })
                     {student.order}. {student.name}
                   </td>
                   {state.weeks.map((w) => {
-                    const rec = state.attendance[`${student.id}_${w.week}`];
+                    const cellKey = `${student.id}_${w.week}`;
+                    const rec = state.attendance[cellKey];
                     const isPresent = rec?.status === 'present';
                     const isPastClosed =
                       !w.isFreeCredit &&
@@ -122,6 +155,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ state, nowBangkok })
                         (w.date === nowBangkok.isoDate &&
                           nowBangkok.totalMinutes > CHECKIN_END_MINUTES));
                     const isAbsent = rec?.status === 'absent' || (!isPresent && isPastClosed);
+                    const isUpdating = updatingCell === cellKey;
 
                     return (
                       <td
@@ -130,7 +164,23 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ state, nowBangkok })
                           w.date === nowBangkok.isoDate ? 'bg-blue-50/40' : ''
                         }`}
                       >
-                        {isPresent ? (
+                        {isTeacher ? (
+                          <button
+                            type="button"
+                            disabled={isUpdating}
+                            onClick={() => handleToggleCell(student.id, student.name, w.week, isPresent)}
+                            title={`สลับสถานะ ${student.name} สัปดาห์ ${w.week}`}
+                            className="mx-auto flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-slate-100 disabled:opacity-50"
+                          >
+                            {isPresent ? (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-label="มาเรียน" />
+                            ) : isAbsent ? (
+                              <XCircle className="h-4 w-4 text-red-600" aria-label="ขาด" />
+                            ) : (
+                              <Clock className="h-3.5 w-3.5 text-slate-300" aria-label="ยังไม่ถึงเวลา" />
+                            )}
+                          </button>
+                        ) : isPresent ? (
                           <CheckCircle2
                             className="mx-auto h-4 w-4 text-emerald-600"
                             aria-label="มาเรียน"

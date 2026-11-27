@@ -21,6 +21,7 @@ import {
   type AttendanceRecord,
   type BangkokNowInfo,
   type ClassroomStatePayload,
+  type Student,
   type Submission,
   computeStudentAttendanceSummary,
   getBangkokNowInfo,
@@ -29,7 +30,7 @@ import { auth, db, analyticsPromise, testFirestoreConnection } from './firebase'
 import {
   buildDefaultAttendanceMap,
   isTeacherUser,
-  seedBaselineAssignmentsToFirestore,
+  seedBaselineClassroomIfNeeded,
   submitStudentSelfCheckIn,
   subscribeClassroomCollections,
 } from './services/classroomFirebase';
@@ -44,14 +45,15 @@ type TabKey = 'attendance' | 'assignments' | 'summary' | 'schedule';
 const NAV_TABS: { key: TabKey; label: string; icon: React.FC<{ className?: string }> }[] = [
   { key: 'attendance', label: 'เช็คชื่อเรียน', icon: CalendarCheck },
   { key: 'assignments', label: 'ใบงาน & ส่งภาพ', icon: FileImage },
-  { key: 'summary', label: 'สรุปคะแนน 100', icon: GraduationCap },
+  { key: 'summary', label: 'รายงานสรุป 100 คะแนน', icon: GraduationCap },
   { key: 'schedule', label: 'ตาราง 20 สัปดาห์', icon: LayoutGrid },
 ];
 
 export default function App() {
+  const [students, setStudents] = useState<Student[]>(STUDENTS);
   const [assignments, setAssignments] = useState<Assignment[]>(INITIAL_ASSIGNMENTS);
   const [attendance, setAttendance] = useState<Record<string, AttendanceRecord>>(() =>
-    buildDefaultAttendanceMap()
+    buildDefaultAttendanceMap(STUDENTS)
   );
   const [submissions, setSubmissions] = useState<Record<string, Submission>>({});
   const [firebaseConnected, setFirebaseConnected] = useState(false);
@@ -79,7 +81,6 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [notification]);
 
-  // Initialize Analytics + test Firestore connection + subscribe real-time listeners
   useEffect(() => {
     void analyticsPromise;
     let active = true;
@@ -94,6 +95,10 @@ export default function App() {
     });
 
     const unsubDb = subscribeClassroomCollections({
+      onStudents: (list) => {
+        if (!active) return;
+        setStudents(list);
+      },
       onAssignments: (list) => {
         if (!active) return;
         setAssignments(list);
@@ -139,7 +144,7 @@ export default function App() {
       setIsTeacher(allowed);
       setTeacherEmail(allowed ? user.email : null);
       if (allowed) {
-        void seedBaselineAssignmentsToFirestore(new Set()).catch(() => {});
+        void seedBaselineClassroomIfNeeded().catch(() => {});
       }
     });
 
@@ -150,7 +155,6 @@ export default function App() {
     };
   }, []);
 
-  // Live Thailand clock ticker (updates every 1s)
   useEffect(() => {
     const interval = window.setInterval(() => {
       setNowBangkok(getBangkokNowInfo(new Date()));
@@ -160,7 +164,7 @@ export default function App() {
 
   const state: ClassroomStatePayload = useMemo(
     () => ({
-      students: STUDENTS,
+      students,
       weeks: SESSION_WEEKS,
       assignments,
       attendance,
@@ -171,13 +175,13 @@ export default function App() {
       },
       serverNowBangkok: nowBangkok,
     }),
-    [assignments, attendance, submissions, nowBangkok]
+    [students, assignments, attendance, submissions, nowBangkok]
   );
 
   const selectedStudent = useMemo(() => {
     if (!selectedStudentId) return null;
-    return STUDENTS.find((s) => s.id === selectedStudentId) ?? null;
-  }, [selectedStudentId]);
+    return students.find((s) => s.id === selectedStudentId) ?? null;
+  }, [students, selectedStudentId]);
 
   const selectedStudentStats = useMemo(() => {
     if (!selectedStudent) return null;
@@ -211,7 +215,7 @@ export default function App() {
     if (!selectedStudent) return;
     setQuickCheckingIn(true);
     try {
-      const msg = await submitStudentSelfCheckIn(selectedStudent.id);
+      const msg = await submitStudentSelfCheckIn(selectedStudent.id, students);
       showNotification(msg, 'success');
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'ไม่สามารถเช็คชื่อได้';
@@ -232,6 +236,14 @@ export default function App() {
     setTeacherEmail(null);
     showNotification('ออกจากโหมดครูผู้สอนแล้ว', 'success');
   }
+
+  const distinctRooms = useMemo(
+    () =>
+      Array.from(new Set(students.map((s) => s.room)))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .join(', '),
+    [students]
+  );
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
@@ -309,7 +321,7 @@ export default function App() {
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
         {firebaseWarning && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium leading-relaxed text-amber-900">
+          <div className="no-print rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium leading-relaxed text-amber-900">
             {firebaseWarning}
           </div>
         )}
@@ -317,7 +329,7 @@ export default function App() {
         {notification && (
           <div
             role="status"
-            className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${
+            className={`no-print flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${
               notification.tone === 'success'
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
                 : 'border-red-200 bg-red-50 text-red-900'
@@ -341,14 +353,16 @@ export default function App() {
           </div>
         )}
 
-        <section className="space-y-4">
+        <section className="no-print space-y-4">
           <div className="grid grid-cols-1 items-stretch overflow-hidden rounded-xl border border-slate-200 bg-white lg:grid-cols-12">
             <div className="flex flex-col justify-between p-6 lg:col-span-7 lg:p-7">
               <div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   <span>ชุมนุมสร้างสรรค์ภาพด้วย AI</span>
                   <span aria-hidden="true">·</span>
-                  <span>ม.5 ห้อง 8, 9, 13, 14 (20 คน)</span>
+                  <span>
+                    ม.5 ห้อง {distinctRooms || '-'} ({students.length} คน)
+                  </span>
                   <span aria-hidden="true">·</span>
                   <span className={firebaseConnected ? 'font-medium text-emerald-700' : 'text-slate-500'}>
                     {firebaseConnected ? 'เชื่อมต่อ Firebase เรียลไทม์' : 'กำลังเชื่อมต่อ Firebase...'}
@@ -385,8 +399,8 @@ export default function App() {
                       onChange={(e) => setSelectedStudentId(e.target.value)}
                       className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-blue-600"
                     >
-                      <option value="">-- เลือกชื่อจากรายชื่อ 20 คน --</option>
-                      {STUDENTS.map((s) => (
+                      <option value="">-- เลือกชื่อจากรายชื่อ {students.length} คน --</option>
+                      {students.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.order}. [{s.id}] {s.name} ({s.grade}/{s.room} เลขที่ {s.number})
                         </option>
@@ -554,7 +568,12 @@ export default function App() {
         )}
 
         {activeTab === 'schedule' && (
-          <ScheduleView state={state} nowBangkok={nowBangkok} />
+          <ScheduleView
+            state={state}
+            nowBangkok={nowBangkok}
+            isTeacher={isTeacher}
+            onNotify={showNotification}
+          />
         )}
       </main>
 
@@ -573,6 +592,7 @@ export default function App() {
         onAuthenticated={(email) => {
           setIsTeacher(true);
           setTeacherEmail(email);
+          void seedBaselineClassroomIfNeeded().catch(() => {});
           showNotification(`เข้าสู่โหมดครูผู้สอน (${email}) เรียบร้อยแล้ว`, 'success');
         }}
       />

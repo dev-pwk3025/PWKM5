@@ -1,9 +1,13 @@
 import {
   collection,
+  deleteDoc,
   doc,
+  getDoc,
+  getDocs,
   onSnapshot,
   setDoc,
   updateDoc,
+  writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
@@ -21,6 +25,7 @@ import {
   getBangkokNowInfo,
   type Assignment,
   type AttendanceRecord,
+  type Student,
   type Submission,
 } from '../shared/classroomData';
 
@@ -31,11 +36,11 @@ export function isTeacherUser(email: string | null | undefined, isAdminDoc: bool
   return TEACHER_EMAILS.has(email.toLowerCase()) || isAdminDoc;
 }
 
-export function buildDefaultAttendanceMap(): Record<string, AttendanceRecord> {
+export function buildDefaultAttendanceMap(studentsList: Student[] = STUDENTS): Record<string, AttendanceRecord> {
   const map: Record<string, AttendanceRecord> = {};
   for (const week of SESSION_WEEKS) {
     if (week.isFreeCredit) {
-      for (const student of STUDENTS) {
+      for (const student of studentsList) {
         map[`${student.id}_${week.week}`] = {
           studentId: student.id,
           week: week.week,
@@ -50,11 +55,69 @@ export function buildDefaultAttendanceMap(): Record<string, AttendanceRecord> {
 }
 
 export function subscribeClassroomCollections(callbacks: {
+  onStudents: (students: Student[]) => void;
   onAssignments: (assignments: Assignment[]) => void;
   onAttendance: (attendance: Record<string, AttendanceRecord>) => void;
   onSubmissions: (submissions: Record<string, Submission>) => void;
   onError: (err: Error) => void;
 }): Unsubscribe {
+  let rosterSeeded = false;
+  let latestStudents: Student[] = STUDENTS;
+  let rawAttendanceDocs: Record<string, AttendanceRecord> = {};
+
+  const emitAttendance = () => {
+    const map = buildDefaultAttendanceMap(latestStudents);
+    for (const [id, rec] of Object.entries(rawAttendanceDocs)) {
+      map[id] = rec;
+    }
+    callbacks.onAttendance(map);
+  };
+
+  const unsubRosterSetting = onSnapshot(
+    doc(db, 'settings', 'roster'),
+    (snap) => {
+      rosterSeeded = snap.exists() && Boolean(snap.data()?.seeded);
+    },
+    () => {
+      // Non-fatal if settings/roster isn't readable yet
+    }
+  );
+
+  const unsubStudents = onSnapshot(
+    collection(db, 'students'),
+    (snapshot) => {
+      if (snapshot.empty && !rosterSeeded) {
+        latestStudents = STUDENTS;
+        callbacks.onStudents(STUDENTS);
+        emitAttendance();
+        return;
+      }
+      const list = snapshot.docs
+        .map((d) => {
+          const data = d.data() as Student;
+          return {
+            order: Number(data.order) || 0,
+            id: String(data.id || d.id),
+            name: String(data.name || ''),
+            grade: String(data.grade || 'ม.5'),
+            room: String(data.room || ''),
+            number: Number(data.number) || 0,
+          };
+        })
+        .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+      latestStudents = list;
+      callbacks.onStudents(list);
+      emitAttendance();
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'students');
+      } catch (e) {
+        callbacks.onError(e instanceof Error ? e : new Error(String(e)));
+      }
+    }
+  );
+
   const unsubAssignments = onSnapshot(
     collection(db, 'assignments'),
     (snapshot) => {
@@ -81,12 +144,12 @@ export function subscribeClassroomCollections(callbacks: {
   const unsubAttendance = onSnapshot(
     collection(db, 'attendance'),
     (snapshot) => {
-      const map = buildDefaultAttendanceMap();
+      const docsMap: Record<string, AttendanceRecord> = {};
       for (const docSnap of snapshot.docs) {
-        const data = docSnap.data() as AttendanceRecord;
-        map[docSnap.id] = data;
+        docsMap[docSnap.id] = docSnap.data() as AttendanceRecord;
       }
-      callbacks.onAttendance(map);
+      rawAttendanceDocs = docsMap;
+      emitAttendance();
     },
     (error) => {
       try {
@@ -117,26 +180,91 @@ export function subscribeClassroomCollections(callbacks: {
   );
 
   return () => {
+    unsubRosterSetting();
+    unsubStudents();
     unsubAssignments();
     unsubAttendance();
     unsubSubmissions();
   };
 }
 
-export async function seedBaselineAssignmentsToFirestore(existingIds: Set<string>): Promise<void> {
-  for (const assignment of INITIAL_ASSIGNMENTS) {
-    if (!existingIds.has(assignment.id)) {
-      try {
+export async function seedBaselineClassroomIfNeeded(): Promise<void> {
+  if (!auth.currentUser) return;
+  try {
+    const rosterSettingSnap = await getDoc(doc(db, 'settings', 'roster'));
+    if (!rosterSettingSnap.exists()) {
+      const existingStudents = await getDocs(collection(db, 'students'));
+      const batch = writeBatch(db);
+      if (existingStudents.empty) {
+        for (const student of STUDENTS) {
+          batch.set(doc(db, 'students', student.id), student);
+        }
+      }
+      batch.set(doc(db, 'settings', 'roster'), {
+        seeded: true,
+        updatedAt: new Date().toISOString(),
+      });
+      await batch.commit();
+    }
+
+    const existingAssignments = await getDocs(collection(db, 'assignments'));
+    const existingIds = new Set(existingAssignments.docs.map((d) => d.id));
+    for (const assignment of INITIAL_ASSIGNMENTS) {
+      if (!existingIds.has(assignment.id)) {
         await setDoc(doc(db, 'assignments', assignment.id), assignment);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `assignments/${assignment.id}`);
       }
     }
+  } catch {
+    // Rules or network issue handled by caller listeners
   }
 }
 
-export async function submitStudentSelfCheckIn(studentId: string): Promise<string> {
-  const student = STUDENTS.find((s) => s.id === studentId);
+export async function teacherSaveStudent(student: Student, previousId?: string): Promise<void> {
+  if (!auth.currentUser) throw new Error('กรุณาเข้าสู่ระบบครูผู้สอนด้วย Google ก่อน');
+  const cleanId = student.id.trim();
+  if (!/^[a-zA-Z0-9_-]{1,20}$/.test(cleanId)) {
+    throw new Error('รหัสนักเรียนต้องเป็นตัวเลขหรือตัวอักษรภาษาอังกฤษ 1–20 ตัว');
+  }
+  const cleanName = student.name.trim().slice(0, 160);
+  if (!cleanName) throw new Error('กรุณากรอกชื่อ-สกุลนักเรียน');
+
+  const payload: Student = {
+    order: Math.max(1, Math.round(Number(student.order) || 1)),
+    id: cleanId,
+    name: cleanName,
+    grade: student.grade.trim().slice(0, 20) || 'ม.5',
+    room: student.room.trim().slice(0, 20) || '1',
+    number: Math.max(1, Math.round(Number(student.number) || 1)),
+  };
+
+  try {
+    await seedBaselineClassroomIfNeeded();
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'students', payload.id), payload);
+    if (previousId && previousId !== payload.id) {
+      batch.delete(doc(db, 'students', previousId));
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `students/${payload.id}`);
+  }
+}
+
+export async function teacherDeleteStudent(studentId: string): Promise<void> {
+  if (!auth.currentUser) throw new Error('กรุณาเข้าสู่ระบบครูผู้สอนด้วย Google ก่อน');
+  try {
+    await seedBaselineClassroomIfNeeded();
+    await deleteDoc(doc(db, 'students', studentId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `students/${studentId}`);
+  }
+}
+
+export async function submitStudentSelfCheckIn(
+  studentId: string,
+  studentsList: Student[] = STUDENTS
+): Promise<string> {
+  const student = studentsList.find((s) => s.id === studentId);
   if (!student) throw new Error('ไม่พบข้อมูลนักเรียนที่เลือก');
 
   const nowInfo = getBangkokNowInfo(new Date());
@@ -196,16 +324,53 @@ export async function teacherSetAttendance(
   }
 }
 
+export async function teacherClearAttendance(studentId: string, week: number): Promise<void> {
+  if (!auth.currentUser) throw new Error('กรุณาเข้าสู่ระบบครูผู้สอนด้วย Google ก่อน');
+  const recordId = `${studentId}_${week}`;
+  try {
+    await deleteDoc(doc(db, 'attendance', recordId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `attendance/${recordId}`);
+  }
+}
+
+export async function teacherBulkSetWeekAttendance(
+  studentsList: Student[],
+  week: number,
+  status: 'present' | 'absent'
+): Promise<void> {
+  if (!auth.currentUser) throw new Error('กรุณาเข้าสู่ระบบครูผู้สอนด้วย Google ก่อน');
+  try {
+    const batch = writeBatch(db);
+    const nowIso = new Date().toISOString();
+    for (const student of studentsList) {
+      const recordId = `${student.id}_${week}`;
+      batch.set(doc(db, 'attendance', recordId), {
+        studentId: student.id,
+        week,
+        status,
+        source: 'teacher',
+        checkedAt: nowIso,
+      });
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `attendance/week_${week}`);
+  }
+}
+
 export async function submitStudentWorksheet(params: {
   studentId: string;
+  studentsList: Student[];
   assignment: Assignment;
   answers: Record<string, string>;
   promptText: string;
   imageFile: File | null;
   existingSubmission?: Submission;
 }): Promise<string> {
-  const { studentId, assignment, answers, promptText, imageFile, existingSubmission } = params;
-  const student = STUDENTS.find((s) => s.id === studentId);
+  const { studentId, studentsList, assignment, answers, promptText, imageFile, existingSubmission } =
+    params;
+  const student = studentsList.find((s) => s.id === studentId);
   if (!student) throw new Error('กรุณาเลือกชื่อนักเรียนก่อนส่งงาน');
 
   let imageUrl = existingSubmission?.imageUrl ?? null;

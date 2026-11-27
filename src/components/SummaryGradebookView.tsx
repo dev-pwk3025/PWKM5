@@ -1,5 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Download, Search, CheckCircle2, AlertTriangle, XCircle, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  Printer,
+  Search,
+  X,
+  XCircle,
+} from 'lucide-react';
 import {
   type BangkokNowInfo,
   type ClassroomStatePayload,
@@ -14,13 +22,7 @@ interface SummaryGradebookViewProps {
   onSelectStudent: (studentId: string) => void;
 }
 
-const ROOM_FILTERS = [
-  { id: 'all', label: 'ทุกห้อง' },
-  { id: '8', label: 'ม.5/8' },
-  { id: '9', label: 'ม.5/9' },
-  { id: '13', label: 'ม.5/13' },
-  { id: '14', label: 'ม.5/14' },
-];
+type StatusFilter = 'all' | 'pass' | 'in_progress' | 'fail';
 
 export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
   state,
@@ -29,8 +31,16 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
   onSelectStudent,
 }) => {
   const [roomFilter, setRoomFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [detailStudent, setDetailStudent] = useState<Student | null>(null);
+
+  const roomFilters = useMemo(() => {
+    const rooms = Array.from(new Set(state.students.map((s) => s.room))).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true })
+    );
+    return [{ id: 'all', label: 'ทุกห้อง' }, ...rooms.map((r) => ({ id: r, label: `ม.5/${r}` }))];
+  }, [state.students]);
 
   const publishedAssignments = useMemo(
     () => state.assignments.filter((a) => a.isPublished).sort((a, b) => a.order - b.order),
@@ -45,11 +55,6 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
   const rows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return state.students
-      .filter((s) => {
-        if (roomFilter !== 'all' && s.room !== roomFilter) return false;
-        if (!q) return true;
-        return s.id.includes(q) || s.name.toLowerCase().includes(q);
-      })
       .map((student) => {
         const attendance = computeStudentAttendanceSummary(
           student.id,
@@ -74,25 +79,50 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
           totalScore,
           submittedCount,
         };
+      })
+      .filter((r) => {
+        if (roomFilter !== 'all' && r.student.room !== roomFilter) return false;
+        if (statusFilter === 'pass' && !r.attendance.meets80Now) return false;
+        if (statusFilter === 'in_progress' && (r.attendance.meets80Now || !r.attendance.canStillPass80))
+          return false;
+        if (statusFilter === 'fail' && r.attendance.canStillPass80) return false;
+        if (!q) return true;
+        return r.student.id.toLowerCase().includes(q) || r.student.name.toLowerCase().includes(q);
       });
-  }, [state.students, state.attendance, state.submissions, publishedAssignments, nowBangkok, roomFilter, searchQuery]);
+  }, [
+    state.students,
+    state.attendance,
+    state.submissions,
+    publishedAssignments,
+    nowBangkok,
+    roomFilter,
+    statusFilter,
+    searchQuery,
+  ]);
 
   const classStats = useMemo(() => {
     let pass80 = 0;
+    let atRisk = 0;
     let totalScoreSum = 0;
     let totalAttendancePct = 0;
+    let totalSubmissions = 0;
     for (const r of rows) {
       if (r.attendance.meets80Now) pass80++;
+      if (!r.attendance.canStillPass80) atRisk++;
       totalScoreSum += r.totalScore;
       totalAttendancePct += r.attendance.percentOf20;
+      totalSubmissions += r.submittedCount;
     }
     const n = rows.length || 1;
     return {
       pass80,
+      atRisk,
       avgScore: Math.round((totalScoreSum / n) * 10) / 10,
       avgAttendancePct: Math.round((totalAttendancePct / n) * 10) / 10,
+      totalSubmissions,
+      maxPossibleSubmissions: rows.length * publishedAssignments.length,
     };
-  }, [rows]);
+  }, [rows, publishedAssignments.length]);
 
   function handleExportCsv() {
     const headers = [
@@ -103,6 +133,7 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
       'ห้อง',
       'เลขที่',
       'มาเรียน(สัปดาห์/20)',
+      'ขาด(ครั้ง)',
       'ร้อยละเวลาเรียน(%)',
       'เกณฑ์80%',
       ...publishedAssignments.map((a) => `ใบงาน${a.order}(${a.maxScore})`),
@@ -117,84 +148,133 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
       r.student.room,
       r.student.number,
       `${r.attendance.presentCount}/20`,
+      r.attendance.absentCount,
       r.attendance.percentOf20.toFixed(1),
-      r.attendance.meets80Now ? 'ผ่านเกณฑ์ 80%' : r.attendance.canStillPass80 ? 'กำลังสะสม' : 'ไม่ผ่านเกณฑ์',
+      r.attendance.meets80Now
+        ? 'ผ่านเกณฑ์ 80%'
+        : r.attendance.canStillPass80
+          ? 'กำลังสะสม'
+          : 'ไม่ผ่านเกณฑ์',
       ...r.scores.map((s) => (s.score !== null ? s.score : s.submission ? 'รอตรวจ' : 0)),
       r.totalScore,
     ]);
 
-    const csvString = '\uFEFF' + [headers.join(','), ...csvRows.map((row) => row.join(','))].join('\n');
+    const csvString =
+      '\uFEFF' + [headers.join(','), ...csvRows.map((row) => row.join(','))].join('\n');
     const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `classroom-summary-${nowBangkok.isoDate}.csv`;
+    link.download = `classroom-report-${nowBangkok.isoDate}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
 
   return (
     <section className="space-y-6">
-      {/* Top Summary Strip */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <div className="text-xs font-medium text-slate-500">เกณฑ์เวลาเรียนร้อยละ 80 (16/20 สัปดาห์)</div>
-          <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
-            {classStats.pass80} <span className="text-sm font-normal text-slate-500">/ {rows.length} คน ผ่านเกณฑ์แล้ว</span>
-          </div>
-          <div className="mt-1 text-xs text-slate-500 tabular-nums">
-            เฉลี่ยเวลาเรียนปัจจุบัน {classStats.avgAttendancePct.toFixed(1)}%
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <div className="text-xs font-medium text-slate-500">คะแนนเก็บเฉลี่ย (จาก {publishedAssignments.length} ใบงาน)</div>
-          <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
-            {classStats.avgScore} <span className="text-sm font-normal text-slate-500">/ {totalMaxScore} คะแนน</span>
-          </div>
-          <div className="mt-1 text-xs text-slate-500">
-            คลิกชื่อนักเรียนในตารางเพื่อดูภาพผลงานและประวัติเช็คชื่อ
-          </div>
-        </div>
-
-        <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5">
+      {/* Report Title Header (visible in screen & print) */}
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-xs font-medium text-slate-500">ส่งออกรายงานสรุปผล</div>
-            <p className="mt-1 text-xs text-slate-600">
-              ดาวน์โหลดไฟล์ตารางสรุปเวลาเรียน 20 สัปดาห์ และคะแนน 100 คะแนนเป็น CSV
+            <h2 className="text-xl font-bold text-slate-900">
+              รายงานสรุปการมาเรียนและคะแนนใบงาน ({totalMaxScore} คะแนน)
+            </h2>
+            <p className="mt-1 text-xs text-slate-500 tabular-nums">
+              ชุมนุมสร้างสรรค์ภาพด้วย AI · ข้อมูล ณ วันที่ {nowBangkok.isoDate} เวลา{' '}
+              {nowBangkok.timeHHMM} น. · นักเรียนในมุมมองนี้ {rows.length} คน
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            className="mt-3 inline-flex w-fit items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-50"
-          >
-            <Download className="h-4 w-4" />
-            <span>ดาวน์โหลด CSV สรุปผล</span>
-          </button>
+          <div className="no-print flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-50"
+            >
+              <Printer className="h-4 w-4" />
+              <span>พิมพ์รายงาน / PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-blue-700 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-800"
+            >
+              <Download className="h-4 w-4" />
+              <span>ดาวน์โหลด CSV</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="text-xs font-medium text-slate-500">
+            สรุปเกณฑ์เวลาเรียนร้อยละ 80 (16/20 สัปดาห์)
+          </div>
+          <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
+            {classStats.pass80}{' '}
+            <span className="text-sm font-normal text-slate-500">/ {rows.length} คน ผ่านเกณฑ์แล้ว</span>
+          </div>
+          <div className="mt-1 text-xs text-slate-500 tabular-nums">
+            เฉลี่ยเวลาเรียน {classStats.avgAttendancePct.toFixed(1)}% · ไม่ถึงเกณฑ์ {classStats.atRisk} คน
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="text-xs font-medium text-slate-500">
+            คะแนนใบงานเฉลี่ย ({publishedAssignments.length} ใบงาน)
+          </div>
+          <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
+            {classStats.avgScore}{' '}
+            <span className="text-sm font-normal text-slate-500">/ {totalMaxScore} คะแนน</span>
+          </div>
+          <div className="mt-1 text-xs text-slate-500 tabular-nums">
+            ส่งงานแล้วทั้งหมด {classStats.totalSubmissions} / {classStats.maxPossibleSubmissions} ชิ้น
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <div className="text-xs font-medium text-slate-500">การตรวจสอบรายละเอียดรายบุคคล</div>
+          <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+            คลิกที่ชื่อนักเรียนในตารางเพื่อดูภาพผลงานที่อัปโหลด คำสั่ง Prompt และคะแนนรายใบงานทั้งหมด
+          </p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
-          {ROOM_FILTERS.map((room) => (
-            <button
-              key={room.id}
-              type="button"
-              onClick={() => setRoomFilter(room.id)}
-              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                roomFilter === room.id
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {room.label}
-            </button>
-          ))}
+      <div className="no-print flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
+            {roomFilters.map((room) => (
+              <button
+                key={room.id}
+                type="button"
+                onClick={() => setRoomFilter(room.id)}
+                className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  roomFilter === room.id
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {room.label}
+              </button>
+            ))}
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            aria-label="กรองตามสถานะเวลาเรียน"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-blue-600"
+          >
+            <option value="all">ทุกสถานะเวลาเรียน</option>
+            <option value="pass">ผ่านเกณฑ์ ≥ 80%</option>
+            <option value="in_progress">กำลังสะสมเวลาเรียน</option>
+            <option value="fail">ไม่ผ่านเกณฑ์ &lt; 80%</option>
+          </select>
         </div>
 
-        <div className="relative w-full sm:w-64">
+        <div className="relative w-full lg:w-64">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -217,6 +297,7 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
                 <th className="px-3 py-3">ชื่อ-สกุล</th>
                 <th className="px-3 py-3">ห้อง/เลขที่</th>
                 <th className="px-3 py-3 text-right">มาเรียน</th>
+                <th className="px-3 py-3 text-right">ขาด</th>
                 <th className="px-3 py-3">เกณฑ์ 80%</th>
                 {publishedAssignments.map((a) => (
                   <th key={a.id} className="px-3 py-3 text-right whitespace-nowrap">
@@ -265,6 +346,9 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
                       </span>{' '}
                       <span className="text-slate-500">({attendance.percentOf20.toFixed(0)}%)</span>
                     </td>
+                    <td className="px-3 py-3 text-right font-mono text-xs text-red-700 tabular-nums">
+                      {attendance.absentCount}
+                    </td>
                     <td className="px-3 py-3 whitespace-nowrap">
                       {attendance.meets80Now ? (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
@@ -303,12 +387,21 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
                   </tr>
                 );
               })}
+              {rows.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={8 + publishedAssignments.length}
+                    className="px-4 py-10 text-center text-sm text-slate-500"
+                  >
+                    ไม่พบข้อมูลนักเรียนตามเงื่อนไขที่เลือก
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Student Portfolio & Attendance Detail Modal */}
       {detailStudent && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"

@@ -37,10 +37,21 @@ service cloud.firestore {
       return bkk.dayOfWeek() == 4 && mins >= 895 && mins <= 950;
     }
 
+    function isValidStudent(data) {
+      return data.keys().hasAll(['order', 'id', 'name', 'grade', 'room', 'number'])
+        && data.keys().hasOnly(['order', 'id', 'name', 'grade', 'room', 'number'])
+        && data.order is number && data.order >= 1 && data.order <= 9999
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 20 && data.id.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
+        && data.grade is string && data.grade.size() >= 1 && data.grade.size() <= 20
+        && data.room is string && data.room.size() >= 1 && data.room.size() <= 20
+        && data.number is number && data.number >= 1 && data.number <= 999;
+    }
+
     function isValidAttendance(data) {
       return data.keys().hasAll(['studentId', 'week', 'status', 'source'])
         && data.keys().hasOnly(['studentId', 'week', 'status', 'source', 'checkedAt'])
-        && data.studentId is string && data.studentId.size() <= 20 && data.studentId.matches('^[0-9]+$')
+        && data.studentId is string && data.studentId.size() <= 20 && data.studentId.matches('^[a-zA-Z0-9_\\-]+$')
         && data.week is int && data.week >= 1 && data.week <= 20
         && data.status in ['present', 'absent']
         && data.source in ['free_credit', 'self_checkin', 'teacher'];
@@ -54,7 +65,7 @@ service cloud.firestore {
         ])
         && isValidId(data.id)
         && isValidId(data.assignmentId)
-        && data.studentId is string && data.studentId.size() <= 20 && data.studentId.matches('^[0-9]+$')
+        && data.studentId is string && data.studentId.size() <= 20 && data.studentId.matches('^[a-zA-Z0-9_\\-]+$')
         && (!('promptText' in data) || (data.promptText is string && data.promptText.size() <= 4000))
         && (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 1500))
         && (!('imageOriginalName' in data) || data.imageOriginalName == null || (data.imageOriginalName is string && data.imageOriginalName.size() <= 200))
@@ -70,6 +81,17 @@ service cloud.firestore {
     match /admins/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow write: if false;
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin() && isValidId(settingId);
+    }
+
+    match /students/{studentId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(studentId) && isValidStudent(incoming()) && incoming().id == studentId;
+      allow delete: if isAdmin() && isValidId(studentId);
     }
 
     match /assignments/{assignmentId} {
@@ -88,7 +110,7 @@ service cloud.firestore {
         )
       );
       allow update: if isValidId(recordId) && isValidAttendance(incoming()) && isAdmin();
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && isValidId(recordId);
     }
 
     match /submissions/{submissionId} {
@@ -109,7 +131,7 @@ service cloud.firestore {
           ])
         )
       );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && isValidId(submissionId);
     }
   }
 }
