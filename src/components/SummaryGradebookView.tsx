@@ -173,7 +173,9 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
   return (
     <section className="space-y-6">
       {/* Report Title Header (visible in screen & print) */}
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-xs">
+        <div className="h-1 bg-gradient-to-r from-indigo-600 via-blue-500 to-cyan-500" />
+        <div className="p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-bold text-slate-900">
@@ -203,12 +205,15 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
             </button>
           </div>
         </div>
+        </div>
       </div>
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <div className="text-xs font-medium text-slate-500">
+        <div className="overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-xs">
+          <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+          <div className="p-5">
+          <div className="text-xs font-medium text-emerald-800">
             สรุปเกณฑ์เวลาเรียนร้อยละ 80 (16/20 สัปดาห์)
           </div>
           <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
@@ -218,10 +223,13 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
           <div className="mt-1 text-xs text-slate-500 tabular-nums">
             เฉลี่ยเวลาเรียน {classStats.avgAttendancePct.toFixed(1)}% · ไม่ถึงเกณฑ์ {classStats.atRisk} คน
           </div>
+          </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <div className="text-xs font-medium text-slate-500">
+        <div className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-xs">
+          <div className="h-1 bg-gradient-to-r from-blue-600 to-indigo-600" />
+          <div className="p-5">
+          <div className="text-xs font-medium text-blue-800">
             คะแนนใบงานเฉลี่ย ({publishedAssignments.length} ใบงาน)
           </div>
           <div className="mt-1.5 text-2xl font-bold text-slate-900 tabular-nums">
@@ -231,13 +239,17 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
           <div className="mt-1 text-xs text-slate-500 tabular-nums">
             ส่งงานแล้วทั้งหมด {classStats.totalSubmissions} / {classStats.maxPossibleSubmissions} ชิ้น
           </div>
+          </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5">
-          <div className="text-xs font-medium text-slate-500">การตรวจสอบรายละเอียดรายบุคคล</div>
+        <div className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-xs">
+          <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-500" />
+          <div className="p-5">
+          <div className="text-xs font-medium text-amber-800">การตรวจสอบรายละเอียดรายบุคคล</div>
           <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
             คลิกที่ชื่อนักเรียนในตารางเพื่อดูภาพผลงานที่อัปโหลด คำสั่ง Prompt และคะแนนรายใบงานทั้งหมด
           </p>
+          </div>
         </div>
       </div>
 
@@ -287,11 +299,11 @@ export const SummaryGradebookView: React.FC<SummaryGradebookViewProps> = ({
       </div>
 
       {/* Summary Gradebook Table */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-indigo-200/80 bg-white shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+              <tr className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50/80 via-blue-50/70 to-sky-50/80 text-xs font-semibold text-indigo-950">
                 <th className="px-3 py-3 text-center">ลำดับ</th>
                 <th className="px-3 py-3">รหัส</th>
                 <th className="px-3 py-3">ชื่อ-สกุล</th>

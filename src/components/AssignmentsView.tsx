@@ -321,7 +321,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
             )}
           </div>
 
-          <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="divide-y divide-indigo-100 overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-xs">
             {publishedAssignments.map((assignment) => {
               const isSelected = activeAssignment?.id === assignment.id;
               const studentSub = selectedStudentId
@@ -337,7 +337,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                   type="button"
                   onClick={() => setActiveAssignmentId(assignment.id)}
                   className={`block w-full p-4 text-left transition-colors ${
-                    isSelected ? 'bg-blue-50/70' : 'bg-white hover:bg-slate-50'
+                    isSelected
+                      ? 'bg-gradient-to-r from-indigo-50 via-blue-50/80 to-cyan-50/60'
+                      : 'bg-white hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
@@ -377,7 +379,9 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
 
         {activeAssignment && (
           <div className="space-y-6 lg:col-span-8">
-            <div className="rounded-xl border border-slate-200 bg-white p-6">
+            <div className="overflow-hidden rounded-xl border border-violet-200 bg-white shadow-xs">
+              <div className="h-1 bg-gradient-to-r from-violet-500 via-indigo-500 to-cyan-500" />
+              <div className="p-6">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                 <span>ใบงานที่ {activeAssignment.order}</span>
                 <span className="font-mono font-semibold text-blue-700 tabular-nums">
@@ -438,11 +442,12 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
                   </div>
                 </div>
               )}
+              </div>
             </div>
 
             <form
               onSubmit={handleSubmitAssignment}
-              className="space-y-5 rounded-xl border border-slate-200 bg-white p-6"
+              className="space-y-5 rounded-xl border border-sky-200 bg-white p-6 shadow-xs"
             >
               <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -644,7 +649,7 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               </div>
             </form>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-6">
+            <div className="rounded-xl border border-emerald-200/80 bg-white p-6 shadow-xs">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h4 className="text-base font-bold text-slate-900">

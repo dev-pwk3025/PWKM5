@@ -43,7 +43,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
 
   return (
     <section className="space-y-6">
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <div className="overflow-hidden rounded-xl border border-indigo-200 bg-white shadow-xs">
+        <div className="h-1 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600" />
+        <div className="p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-bold text-slate-900">
@@ -103,11 +105,12 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
             );
           })}
         </div>
+        </div>
       </div>
 
       {/* Full 20-Week Attendance Matrix */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-200 px-5 py-4">
+      <div className="overflow-hidden rounded-xl border border-indigo-200/80 bg-white shadow-xs">
+        <div className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50/70 via-blue-50/60 to-sky-50/70 px-5 py-4">
           <h3 className="text-base font-bold text-slate-900">
             ตารางสรุปการเข้าเรียนรายสัปดาห์ (20 สัปดาห์ × {state.students.length} คน)
           </h3>

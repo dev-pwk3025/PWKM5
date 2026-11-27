@@ -246,15 +246,22 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-8 px-4 py-3.5 sm:px-6">
+    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-[#F8FAFC] to-indigo-50/70 text-slate-900">
+      <header className="sticky top-0 z-30 border-b border-indigo-100 bg-white/95 shadow-xs backdrop-blur-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:gap-8 sm:px-6">
           <button
             type="button"
             onClick={() => setActiveTab('attendance')}
-            className="whitespace-nowrap shrink-0 text-left text-lg font-bold tracking-tight text-slate-900"
+            className="flex shrink-0 flex-col items-start text-left"
           >
-            AI Creative Classroom
+            <span className="whitespace-nowrap bg-gradient-to-r from-blue-700 via-indigo-700 to-cyan-600 bg-clip-text text-lg font-bold tracking-tight text-transparent sm:text-xl">
+              AI Creative Classroom
+            </span>
+            <span className="mt-1 inline-flex items-center whitespace-nowrap rounded-lg bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 p-[1.5px] shadow-xs">
+              <span className="rounded-[6.5px] bg-gradient-to-r from-blue-50 via-indigo-50 to-cyan-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-900">
+                ชุมนุมสื่อสร้างสรรค์ ม.5
+              </span>
+            </span>
           </button>
 
           <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 md:flex">
@@ -263,10 +270,10 @@ export default function App() {
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`whitespace-nowrap shrink-0 border-b-2 py-1 transition-colors ${
+                className={`whitespace-nowrap shrink-0 border-b-2 py-1.5 transition-colors ${
                   activeTab === tab.key
-                    ? 'border-blue-700 font-semibold text-blue-800'
-                    : 'border-transparent hover:text-slate-900'
+                    ? 'border-indigo-600 font-semibold text-indigo-800'
+                    : 'border-transparent hover:text-indigo-700'
                 }`}
               >
                 {tab.label}
@@ -279,7 +286,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleTeacherLogout}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-indigo-200 bg-indigo-50/70 px-4 py-2 text-xs font-semibold text-indigo-900 transition-colors hover:bg-indigo-100"
               >
                 <LogOut className="h-3.5 w-3.5" />
                 <span>ออกจากโหมดครู</span>
@@ -288,7 +295,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowTeacherModal(true)}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-gradient-to-r from-slate-900 to-indigo-950 px-4 py-2 text-xs font-semibold text-white shadow-xs transition-opacity hover:opacity-95"
               >
                 <Shield className="h-3.5 w-3.5" />
                 <span>โหมดครูผู้สอน</span>
@@ -297,7 +304,7 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="flex items-center gap-1 overflow-x-auto border-t border-slate-100 px-3 py-1.5 md:hidden">
+        <nav className="flex items-center gap-1 overflow-x-auto border-t border-indigo-100/80 bg-indigo-50/30 px-3 py-1.5 md:hidden">
           {NAV_TABS.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -307,8 +314,8 @@ export default function App() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   activeTab === tab.key
-                    ? 'bg-blue-700 text-white'
-                    : 'text-slate-600 hover:bg-slate-100'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-white'
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -321,7 +328,7 @@ export default function App() {
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
         {firebaseWarning && (
-          <div className="no-print rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium leading-relaxed text-amber-900">
+          <div className="no-print rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs font-medium leading-relaxed text-amber-900 shadow-xs">
             {firebaseWarning}
           </div>
         )}
@@ -329,10 +336,10 @@ export default function App() {
         {notification && (
           <div
             role="status"
-            className={`no-print flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${
+            className={`no-print flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-xs ${
               notification.tone === 'success'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                : 'border-red-200 bg-red-50 text-red-900'
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                : 'border-red-300 bg-red-50 text-red-900'
             }`}
           >
             <div className="flex items-center gap-2">
@@ -354,184 +361,198 @@ export default function App() {
         )}
 
         <section className="no-print space-y-4">
-          <div className="grid grid-cols-1 items-stretch overflow-hidden rounded-xl border border-slate-200 bg-white lg:grid-cols-12">
-            <div className="flex flex-col justify-between p-6 lg:col-span-7 lg:p-7">
-              <div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <span>ชุมนุมสร้างสรรค์ภาพด้วย AI</span>
-                  <span aria-hidden="true">·</span>
-                  <span>
-                    ม.5 ห้อง {distinctRooms || '-'} ({students.length} คน)
-                  </span>
-                  <span aria-hidden="true">·</span>
-                  <span className={firebaseConnected ? 'font-medium text-emerald-700' : 'text-slate-500'}>
-                    {firebaseConnected ? 'เชื่อมต่อ Firebase เรียลไทม์' : 'กำลังเชื่อมต่อ Firebase...'}
-                  </span>
-                  {teacherEmail && (
-                    <>
-                      <span aria-hidden="true">·</span>
-                      <span className="font-medium text-blue-700">ครูผู้สอน: {teacherEmail}</span>
-                    </>
-                  )}
-                </div>
-                <h1 className="mt-2 text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                  ระบบเช็คชื่อและส่งผลงานสร้างภาพ AI
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
-                  เช็คชื่อด้วยตนเองทุกวันพฤหัสบดี เวลา 14:55 – 15:50 น. รวม 20 สัปดาห์
-                  (ฟรีวันที่ 5, 12, 19 พ.ย. 69 · เริ่มเช็คชื่อจริง 26 พ.ย. 69) เกณฑ์ผ่านเวลาเรียน
-                  80% และเก็บคะแนนใบงาน 5 ชิ้นรวม 100 คะแนน
-                </p>
-              </div>
-
-              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <div className="flex-1">
-                    <label
-                      htmlFor="global-student-select"
-                      className="block text-xs font-semibold text-slate-700"
-                    >
-                      เลือกชื่อนักเรียนของคุณ (เพื่อเช็คชื่อ / ดูคะแนน / ส่งใบงาน)
-                    </label>
-                    <select
-                      id="global-student-select"
-                      value={selectedStudentId}
-                      onChange={(e) => setSelectedStudentId(e.target.value)}
-                      className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-blue-600"
-                    >
-                      <option value="">-- เลือกชื่อจากรายชื่อ {students.length} คน --</option>
-                      {students.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.order}. [{s.id}] {s.name} ({s.grade}/{s.room} เลขที่ {s.number})
-                        </option>
-                      ))}
-                    </select>
+          <div className="rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-500 to-indigo-600 p-[2px] shadow-sm">
+            <div className="grid grid-cols-1 items-stretch overflow-hidden rounded-[14px] bg-white lg:grid-cols-12">
+              <div className="flex flex-col justify-between p-6 lg:col-span-7 lg:p-7">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                    <span className="font-semibold text-indigo-700">ชุมนุมสื่อสร้างสรรค์ ม.5</span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      ม.5 ห้อง {distinctRooms || '-'} ({students.length} คน)
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span className={firebaseConnected ? 'font-medium text-emerald-700' : 'text-slate-500'}>
+                      {firebaseConnected ? 'เชื่อมต่อ Firebase เรียลไทม์' : 'กำลังเชื่อมต่อ Firebase...'}
+                    </span>
+                    {teacherEmail && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span className="font-medium text-blue-700">ครูผู้สอน: {teacherEmail}</span>
+                      </>
+                    )}
                   </div>
+                  <h1 className="mt-2 text-balance text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                    ระบบเช็คชื่อและส่งผลงานสร้างภาพ AI
+                  </h1>
+                  <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
+                    เช็คชื่อด้วยตนเองทุกวันพฤหัสบดี เวลา 14:55 – 15:50 น. รวม 20 สัปดาห์
+                    (ฟรีวันที่ 5, 12, 19 พ.ย. 69 · เริ่มเช็คชื่อจริง 26 พ.ย. 69) เกณฑ์ผ่านเวลาเรียน
+                    80% และเก็บคะแนนใบงาน 5 ชิ้นรวม 100 คะแนน
+                  </p>
+                </div>
 
-                  {selectedStudent && (
-                    <button
-                      type="button"
-                      disabled={
-                        quickCheckingIn ||
-                        !nowBangkok.isWithinCheckinWindow ||
-                        Boolean(selectedStudentStats?.checkedToday)
-                      }
-                      onClick={handleQuickCheckIn}
-                      className={`inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2.5 text-xs font-semibold transition-colors ${
-                        selectedStudentStats?.checkedToday
-                          ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
-                          : nowBangkok.isWithinCheckinWindow
-                            ? 'bg-blue-700 text-white hover:bg-blue-800'
-                            : 'cursor-not-allowed border border-slate-200 bg-slate-200/70 text-slate-500'
-                      }`}
-                    >
-                      <UserCheck className="h-4 w-4" />
-                      <span>
-                        {quickCheckingIn
-                          ? 'กำลังเช็คชื่อ...'
-                          : selectedStudentStats?.checkedToday
-                            ? 'เช็คชื่อวันนี้แล้ว'
+                <div className="mt-5 rounded-xl border border-indigo-200/80 bg-gradient-to-br from-blue-50/70 via-indigo-50/50 to-cyan-50/60 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="flex-1">
+                      <label
+                        htmlFor="global-student-select"
+                        className="block text-xs font-semibold text-indigo-950"
+                      >
+                        เลือกชื่อนักเรียนของคุณ (เพื่อเช็คชื่อ / ดูคะแนน / ส่งใบงาน)
+                      </label>
+                      <select
+                        id="global-student-select"
+                        value={selectedStudentId}
+                        onChange={(e) => setSelectedStudentId(e.target.value)}
+                        className="mt-1.5 w-full rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-indigo-600"
+                      >
+                        <option value="">-- เลือกชื่อจากรายชื่อ {students.length} คน --</option>
+                        {students.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.order}. [{s.id}] {s.name} ({s.grade}/{s.room} เลขที่ {s.number})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedStudent && (
+                      <button
+                        type="button"
+                        disabled={
+                          quickCheckingIn ||
+                          !nowBangkok.isWithinCheckinWindow ||
+                          Boolean(selectedStudentStats?.checkedToday)
+                        }
+                        onClick={handleQuickCheckIn}
+                        className={`inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2.5 text-xs font-semibold transition-colors ${
+                          selectedStudentStats?.checkedToday
+                            ? 'border border-emerald-300 bg-emerald-50 text-emerald-800'
                             : nowBangkok.isWithinCheckinWindow
-                              ? 'เช็คชื่อเข้าชุมนุมทันที'
-                              : 'ปิดรับเช็คชื่อ'}
+                              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs hover:opacity-95'
+                              : 'cursor-not-allowed border border-slate-200 bg-slate-200/80 text-slate-500'
+                        }`}
+                      >
+                        <UserCheck className="h-4 w-4" />
+                        <span>
+                          {quickCheckingIn
+                            ? 'กำลังเช็คชื่อ...'
+                            : selectedStudentStats?.checkedToday
+                              ? 'เช็คชื่อวันนี้แล้ว'
+                              : nowBangkok.isWithinCheckinWindow
+                                ? 'เช็คชื่อเข้าชุมนุมทันที'
+                                : 'ปิดรับเช็คชื่อ'}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+
+                  {selectedStudent && selectedStudentStats && (
+                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-indigo-200/70 pt-2.5 text-xs text-slate-700 tabular-nums">
+                      <span>
+                        เวลาเรียน:{' '}
+                        <strong className="text-slate-900">
+                          {selectedStudentStats.attendance.presentCount}/20 สัปดาห์ (
+                          {selectedStudentStats.attendance.percentOf20.toFixed(0)}%)
+                        </strong>
                       </span>
-                    </button>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        ส่งใบงานแล้ว:{' '}
+                        <strong className="text-slate-900">
+                          {selectedStudentStats.submittedCount}/
+                          {selectedStudentStats.totalAssignments} ชิ้น
+                        </strong>
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        คะแนนรวม:{' '}
+                        <strong className="text-indigo-800">
+                          {selectedStudentStats.earnedScore}/{selectedStudentStats.maxScore} คะแนน
+                        </strong>
+                      </span>
+                    </div>
                   )}
                 </div>
-
-                {selectedStudent && selectedStudentStats && (
-                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-200 pt-2.5 text-xs text-slate-700 tabular-nums">
-                    <span>
-                      เวลาเรียน:{' '}
-                      <strong className="text-slate-900">
-                        {selectedStudentStats.attendance.presentCount}/20 สัปดาห์ (
-                        {selectedStudentStats.attendance.percentOf20.toFixed(0)}%)
-                      </strong>
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span>
-                      ส่งใบงานแล้ว:{' '}
-                      <strong className="text-slate-900">
-                        {selectedStudentStats.submittedCount}/
-                        {selectedStudentStats.totalAssignments} ชิ้น
-                      </strong>
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span>
-                      คะแนนรวม:{' '}
-                      <strong className="text-blue-800">
-                        {selectedStudentStats.earnedScore}/{selectedStudentStats.maxScore} คะแนน
-                      </strong>
-                    </span>
-                  </div>
-                )}
               </div>
-            </div>
 
-            <div className="relative min-h-[200px] bg-slate-100 lg:col-span-5">
-              <img
-                src="/src/assets/images/classroom_ai_studio_banner_1795676944840.jpg"
-                alt="ห้องเรียนสร้างสรรค์ภาพด้วย AI"
-                referrerPolicy="no-referrer"
-                className="h-56 w-full object-cover lg:h-full"
-              />
+              <div className="relative min-h-[200px] bg-slate-100 lg:col-span-5">
+                <img
+                  src="/src/assets/images/classroom_ai_studio_banner_1795676944840.jpg"
+                  alt="ห้องเรียนสร้างสรรค์ภาพด้วย AI"
+                  referrerPolicy="no-referrer"
+                  className="h-56 w-full object-cover lg:h-full"
+                />
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-                <Clock className="h-3.5 w-3.5 text-blue-700" />
-                <span>เวลาประเทศไทยขณะนี้</span>
-              </div>
-              <div className="mt-1.5 font-mono text-lg font-bold text-slate-900 tabular-nums">
-                {nowBangkok.timeHHMMSS} น.
-              </div>
-              <div className="mt-0.5 text-xs text-slate-600">
-                {nowBangkok.weekdayThai} · เช็คชื่อ 14:55–15:50 น.
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="text-xs font-medium text-slate-500">สถานะเช็คชื่อวันนี้</div>
-              <div
-                className={`mt-1.5 text-base font-bold ${
-                  nowBangkok.isWithinCheckinWindow ? 'text-emerald-700' : 'text-amber-700'
-                }`}
-              >
-                {nowBangkok.isWithinCheckinWindow
-                  ? 'เปิดให้เช็คชื่อ'
-                  : nowBangkok.isThursday
-                    ? 'นอกเวลา 14:55–15:50'
-                    : 'วันอื่นงดเช็คชื่อ'}
-              </div>
-              <div className="mt-0.5 text-xs text-slate-500">
-                {nowBangkok.currentWeek
-                  ? `สัปดาห์ที่ ${nowBangkok.currentWeek.week} (${nowBangkok.currentWeek.thaiLabel})`
-                  : 'เปิดเฉพาะวันพฤหัสบดี'}
+            <div className="overflow-hidden rounded-xl border border-sky-200 bg-white shadow-xs">
+              <div className="h-1 bg-gradient-to-r from-sky-500 to-blue-600" />
+              <div className="p-4">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-sky-800">
+                  <Clock className="h-3.5 w-3.5 text-sky-600" />
+                  <span>เวลาประเทศไทยขณะนี้</span>
+                </div>
+                <div className="mt-1.5 font-mono text-lg font-bold text-slate-900 tabular-nums">
+                  {nowBangkok.timeHHMMSS} น.
+                </div>
+                <div className="mt-0.5 text-xs text-slate-600">
+                  {nowBangkok.weekdayThai} · เช็คชื่อ 14:55–15:50 น.
+                </div>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="text-xs font-medium text-slate-500">เกณฑ์เวลาเรียน 20 สัปดาห์</div>
-              <div className="mt-1.5 font-mono text-lg font-bold text-slate-900 tabular-nums">
-                ≥ 80% <span className="text-xs font-normal text-slate-500">(16/20 ครั้ง)</span>
-              </div>
-              <div className="mt-0.5 text-xs text-slate-500">
-                ฟรี 3 สัปดาห์ (5, 12, 19 พ.ย. 69)
+            <div className="overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-xs">
+              <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+              <div className="p-4">
+                <div className="text-xs font-medium text-emerald-800">สถานะเช็คชื่อวันนี้</div>
+                <div
+                  className={`mt-1.5 text-base font-bold ${
+                    nowBangkok.isWithinCheckinWindow ? 'text-emerald-700' : 'text-amber-700'
+                  }`}
+                >
+                  {nowBangkok.isWithinCheckinWindow
+                    ? 'เปิดให้เช็คชื่อ'
+                    : nowBangkok.isThursday
+                      ? 'นอกเวลา 14:55–15:50'
+                      : 'วันอื่นงดเช็คชื่อ'}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-500">
+                  {nowBangkok.currentWeek
+                    ? `สัปดาห์ที่ ${nowBangkok.currentWeek.week} (${nowBangkok.currentWeek.thaiLabel})`
+                    : 'เปิดเฉพาะวันพฤหัสบดี'}
+                </div>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="text-xs font-medium text-slate-500">คะแนนเก็บใบงานทั้งหมด</div>
-              <div className="mt-1.5 font-mono text-lg font-bold text-slate-900 tabular-nums">
-                {assignments
-                  .filter((a) => a.isPublished)
-                  .reduce((s, a) => s + a.maxScore, 0)}{' '}
-                คะแนน
+            <div className="overflow-hidden rounded-xl border border-violet-200 bg-white shadow-xs">
+              <div className="h-1 bg-gradient-to-r from-violet-500 to-indigo-600" />
+              <div className="p-4">
+                <div className="text-xs font-medium text-violet-800">เกณฑ์เวลาเรียน 20 สัปดาห์</div>
+                <div className="mt-1.5 font-mono text-lg font-bold text-slate-900 tabular-nums">
+                  ≥ 80% <span className="text-xs font-normal text-slate-500">(16/20 ครั้ง)</span>
+                </div>
+                <div className="mt-0.5 text-xs text-slate-500">
+                  ฟรี 3 สัปดาห์ (5, 12, 19 พ.ย. 69)
+                </div>
               </div>
-              <div className="mt-0.5 text-xs text-slate-500 tabular-nums">
-                {assignments.filter((a) => a.isPublished).length} ใบงาน · ส่งภาพเรียลไทม์
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-xs">
+              <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-500" />
+              <div className="p-4">
+                <div className="text-xs font-medium text-amber-800">คะแนนเก็บใบงานทั้งหมด</div>
+                <div className="mt-1.5 font-mono text-lg font-bold text-slate-900 tabular-nums">
+                  {assignments
+                    .filter((a) => a.isPublished)
+                    .reduce((s, a) => s + a.maxScore, 0)}{' '}
+                  คะแนน
+                </div>
+                <div className="mt-0.5 text-xs text-slate-500 tabular-nums">
+                  {assignments.filter((a) => a.isPublished).length} ใบงาน · ส่งภาพเรียลไทม์
+                </div>
               </div>
             </div>
           </div>
@@ -577,10 +598,17 @@ export default function App() {
         )}
       </main>
 
-      <footer className="mt-12 border-t border-slate-200 bg-white py-5">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 text-xs text-slate-500 sm:flex-row sm:px-6">
-          <span>AI Creative Classroom · ชุมนุมสร้างสรรค์ภาพด้วย AI (ม.5)</span>
-          <span className="tabular-nums">
+      <footer className="mt-12 border-t border-indigo-200/80 bg-gradient-to-r from-white via-indigo-50/40 to-sky-50/50 py-6">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 text-center text-xs sm:flex-row sm:px-6 sm:text-left">
+          <div className="space-y-0.5">
+            <div className="font-semibold text-indigo-950">
+              AI Creative Classroom · ชุมนุมสื่อสร้างสรรค์ ม.5
+            </div>
+            <div className="font-medium text-blue-800">
+              โดย ครูเอกอภิสิทธิ์ ดอกศรีจันทร์ ครูชำนาญการพิเศษ โรงเรียนประสาทวิทยาคาร
+            </div>
+          </div>
+          <span className="text-slate-500 tabular-nums">
             เช็คชื่อทุกวันพฤหัสบดี 14:55–15:50 น. · เกณฑ์เวลาเรียน 80% (20 สัปดาห์) · คะแนนงาน 100 คะแนน
           </span>
         </div>

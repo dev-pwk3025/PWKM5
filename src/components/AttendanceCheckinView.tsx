@@ -247,7 +247,9 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
 
   return (
     <section className="space-y-6">
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="overflow-hidden rounded-xl border border-blue-200 bg-white shadow-xs">
+        <div className="h-1 bg-gradient-to-r from-blue-600 via-cyan-500 to-emerald-500" />
+        <div className="p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
@@ -337,6 +339,7 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
             </div>
           </div>
         )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -376,11 +379,11 @@ export const AttendanceCheckinView: React.FC<AttendanceCheckinViewProps> = ({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-indigo-200/80 bg-white shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
+              <tr className="border-b border-indigo-100 bg-gradient-to-r from-indigo-50/80 via-blue-50/70 to-sky-50/80 text-xs font-semibold text-indigo-950">
                 <th className="px-4 py-3 text-center">ลำดับ</th>
                 <th className="px-4 py-3">รหัส</th>
                 <th className="px-4 py-3">ชื่อ-สกุล</th>
